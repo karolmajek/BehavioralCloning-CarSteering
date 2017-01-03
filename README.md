@@ -51,16 +51,16 @@ Center image, Left image, Right image, Steering Angle, Throttle, Break, Speed
 ### Visualize input data while training
 
 ```
-./train.py --show_input 1
+./model.py --show_input 1
 ```
 
-### Change train/val dataset directories
+### Change train/val dataset csv file
 
 ```
-./train.py --training_dir TRAIN_DIR --validation_dir VAL_DIR
+./model.py --training_csv TRAIN_csv --validation_csv VAL_csv
 ```
 
 ### Number of epochs and batch Size
 ```
-./train.py --epochs 50 --batch_size 128
+./model.py --epochs 50 --batch_size 128
 ```
