@@ -3,6 +3,7 @@ from sklearn.model_selection import train_test_split
 from keras.optimizers import Adam
 from keras.layers import Input, Flatten, Dense, Activation, Convolution2D, MaxPooling2D, Dropout
 from keras.models import Model, Sequential, model_from_json
+from keras.utils.visualize_util import plot
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -19,7 +20,7 @@ FLAGS = flags.FLAGS
 np.random.seed(123456)
 
 # command line flags
-flags.DEFINE_string('training_csv', 'recordings/track0_trial4/driving_log.csv', "")
+flags.DEFINE_string('training_csv', 'recordings/track0_trial3/driving_log.csv', "")
 flags.DEFINE_string('validation_csv', None, "")
 flags.DEFINE_integer('epochs', 2, "The number of epochs.")
 flags.DEFINE_integer('batch_size', 64, "The batch size.")
@@ -32,6 +33,9 @@ def load_data(training_csv, validation_csv=None):
     print('-'*60)
     X_train=[]
     y_train=[]
+
+    first_image=True
+
     with open(training_csv, 'r') as csvfile:
         data = list(csv.reader(csvfile, delimiter=','))
         pbar = tqdm(range(len(data)), desc='Loading Train', unit='images')
@@ -40,9 +44,14 @@ def load_data(training_csv, validation_csv=None):
             image0=cv2.imread(l[0].lstrip())
             image1=cv2.imread(l[1].lstrip())
             image2=cv2.imread(l[2].lstrip())
+            if first_image:
+                cv2.imwrite('images/raw.jpg',image0)
             image0=process_image(image0)
             image1=process_image(image1)
             image2=process_image(image2)
+            if first_image:
+                cv2.imwrite('images/processed.jpg',(image0+0.5)*255.0)
+                first_image=False
             if FLAGS.show:
                 image=np.concatenate((image1,image0,image2),axis=1)
                 cv2.imshow('cameras',image)
@@ -111,10 +120,12 @@ def getModel():
     return model
 
 def process_image(image):
-    image=image[65:135:4,::4,0]
+    # image=image[60:130:4,::2,0]
     # diff=image.max()-image.min()
+    # cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    image=image[60:130:4,::2,:]
+    image=np.mean(image,axis=2)
     image=(image-image.min())/255.0-0.5
-    # image=np.mean(image,axis=2)
     image=image.reshape(image.shape[0],image.shape[1],1)
     return image
 
@@ -143,7 +154,7 @@ def main(_):
     model.add(Convolution2D(depth[3],kernel_size[0], kernel_size[1]))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=pool_size))
-    model.add(Dropout(0.25))
+    model.add(Dropout(0.3))
 
     model.add(Flatten())
 
@@ -153,7 +164,7 @@ def main(_):
     model.add(Activation('relu'))
     model.add(Dense(16))
     model.add(Activation('relu'))
-    model.add(Dropout(0.5))
+    model.add(Dropout(0.3))
     model.add(Dense(1))
 
     model.summary()
@@ -164,6 +175,7 @@ def main(_):
         json.dump(json_string, outfile)
         print("Saved model.json")
 
+    plot(model, to_file='images/model.png',show_shapes=True)
 
     # load bottleneck data
     X_train, y_train, X_val, y_val = load_data(FLAGS.training_csv, FLAGS.validation_csv)
