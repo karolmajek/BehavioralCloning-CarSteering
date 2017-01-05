@@ -92,6 +92,11 @@ I have recorded few datasets and choosed relatively small one recorded without p
 
 [![Input dataset visualization](https://img.youtube.com/vi/3LHpZjVAvwQ/0.jpg)](https://www.youtube.com/watch?v=3LHpZjVAvwQ)
 
+Histogram of steering values based on training and validation dataset
+
+![Histogram of steering - training and validation dataset](images/histogram.png)
+
+
 ## Usage examples
 
 ### Visualize input data while training

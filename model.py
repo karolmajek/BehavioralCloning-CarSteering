@@ -17,19 +17,41 @@ import h5py
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
-np.random.seed(123456)
+#set random seed for reproducibility
+random_seed=123456
+np.random.seed(random_seed)
 
 # command line flags
 flags.DEFINE_string('training_csv', 'recordings/track0_trial3/driving_log.csv', "")
 flags.DEFINE_string('validation_csv', None, "")
-flags.DEFINE_integer('epochs', 2, "The number of epochs.")
-flags.DEFINE_integer('batch_size', 64, "The batch size.")
+flags.DEFINE_integer('epochs', 10, "The number of epochs.")
+flags.DEFINE_integer('batch_size', 400, "The batch size.")
 flags.DEFINE_integer('show', False, "Input data visualization")
 
+#Labels for CSV columns - not used, just for info
 image_labels=['Center image','Left image','Right image']
 data_labels=['Steering Angle','Throttle','Break','Speed']
 
-def load_data(training_csv, validation_csv=None):
+def process_image(image):
+    '''
+    Function that process each image during training and while driving.
+    It reduces shape from 320x160x3 to 18x160x1.
+    It also normalize values to zero mean.
+    '''
+    image=image[60:130:4,::2,:]
+    image=np.mean(image,axis=2)
+    image=(image-image.min())/255.0-0.5
+    image=image.reshape(image.shape[0],image.shape[1],1)
+    return image
+
+def load_data(training_csv, validation_csv=None, val_size=0.2):
+    '''
+    Function loads the data training and validation data.
+    If validation_csv is not specified it splits data from training_csv
+     into training and validation using val_size parameter.
+    Otherwise it loads validation data from validation_csv.
+    Function returns X_train, y_train, X_val, y_val
+    '''
     print('-'*60)
     X_train=[]
     y_train=[]
@@ -74,8 +96,8 @@ def load_data(training_csv, validation_csv=None):
 
         X_train, X_val, y_train, y_val = train_test_split(X_train,
             y_train,
-            test_size=0.2,
-            random_state=122333)
+            test_size=val_size,
+            random_state=random_seed)
     else:
         X_val=[]
         y_val=[]
@@ -106,44 +128,32 @@ def load_data(training_csv, validation_csv=None):
     y_val=np.array(y_val)
     X_train = X_train.astype('float32')
     X_val = X_val.astype('float32')
-    print(X_val.shape)
-    print(y_val.shape)
-    print(X_train.shape)
-    print(y_train.shape)
+    print('Shape of training input:',X_train.shape)
+    print('Shape of training output:',y_train.shape)
+    print('Shape of validation input:',X_val.shape)
+    print('Shape of validation output:',y_val.shape)
     return X_train, y_train, X_val, y_val
 
-def getModel():
-    with open('model.json', 'r') as f:
+def getModel(model_file='model.json'):
+    '''
+    Function loads model from model.json file.
+    '''
+    with open(model_file, 'r') as f:
         model = model_from_json(json.load(f))
     model.compile("adam", "mse", metrics=['accuracy'])
-    print("Imported model")
+    print("Model imported")
     return model
 
-def process_image(image):
-    # image=image[60:130:4,::2,0]
-    # diff=image.max()-image.min()
-    # cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    image=image[60:130:4,::2,:]
-    image=np.mean(image,axis=2)
-    image=(image-image.min())/255.0-0.5
-    image=image.reshape(image.shape[0],image.shape[1],1)
-    return image
-
-def main(_):
-    # define model
+def createModel(input_shape):
+    '''
+    Function creates a model of a the network
+    '''
     kernel_size=[3,3]
     depth=[64,32,16,8]
     pool_size=(2,2)
-
-    img=np.zeros(shape=(160,320,3))
-    img=process_image(img)
-    input_shape = img.shape
-    print("img.shape:  ",img.shape)
-    print("input shape:",input_shape)
     print("kernel_size:",kernel_size)
     print("depth:",depth)
     print("pool_size:",pool_size)
-
     model = Sequential()
     model.add(Convolution2D(depth[0], kernel_size[0], kernel_size[1],border_mode='valid',input_shape=input_shape))
     model.add(Activation('relu'))
@@ -166,36 +176,52 @@ def main(_):
     model.add(Activation('relu'))
     model.add(Dropout(0.3))
     model.add(Dense(1))
+    return model
 
-    model.summary()
+def saveModel(model,fname='model.json'):
+    '''
+    Function saves the model to file
+    '''
     json_string = model.to_json()
-    parsed = json.loads(json_string)
-
-    with open('model.json', 'w') as outfile:
+    with open(fname, 'w') as outfile:
         json.dump(json_string, outfile)
-        print("Saved model.json")
+        print("Saved model to:",fname)
 
+def main(_):
+    #get the input shape after processing
+    img=np.zeros(shape=(160,320,3))
+    img=process_image(img)
+    input_shape = img.shape
+
+    print("Image shape before processing:",img.shape)
+    print("Image shape after processing:",input_shape)
+
+    #create the model
+    model =createModel(input_shape)
+
+    #print summary
+    model.summary()
+
+    #save the model
+    saveModel(model)
+
+    #plot the model for README.md
     plot(model, to_file='images/model.png',show_shapes=True)
 
-    # load bottleneck data
+    # load input data
     X_train, y_train, X_val, y_val = load_data(FLAGS.training_csv, FLAGS.validation_csv)
-    print(X_train.shape, y_train.shape)
-    print(X_val.shape, y_val.shape)
 
-    # the histogram of the data
-    # n, bins, patches = plt.hist(y_val, 20, normed=1, facecolor='green', alpha=0.75)
-    # plt.show()
+    # the histogram of the steering data - train and val
+    n, bins, patches = plt.hist(y_train, 40, facecolor='green', alpha=0.75,label=['Training data'])
+    n, bins, patches = plt.hist(y_val, 40, facecolor='red', alpha=0.75, stacked=False,label=['Validation data'])
+    plt.xlabel('Steering value')
+    plt.ylabel('Number of images')
+    plt.title('Histogram of steering values')
+    plt.legend()
+    plt.savefig('images/histogram.png', bbox_inches='tight')
 
-    # define model
-    kernel_size=[3,3]
-    depth=[16,8,4,2]
-    pool_size=(2,2)
-    input_shape = X_train.shape[1:]
-    print("input shape:",input_shape)
-    print("kernel_size:",kernel_size)
-    print("depth:",depth)
-    print("pool_size:",pool_size)
 
+    #Load model from file
     model = getModel()
 
     # train model
